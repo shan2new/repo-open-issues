@@ -1,4 +1,5 @@
 import React from "react";
+import moment from "moment";
 import { useState, useEffect } from "react";
 import InputGroup from "react-bootstrap/InputGroup";
 import Button from "react-bootstrap/Button";
@@ -13,6 +14,7 @@ import GitHubMark from "./images/github_mark_light-lg.png";
 import url from "url";
 import { Motion, spring } from "react-motion";
 import "./App.css";
+import { parallel } from 'async';
 
 const App = () => {
   const [repoUrl, setRepoUrl] = useState("");
@@ -46,11 +48,11 @@ const App = () => {
     );
   };
 
-  const fetchTotalIssuesCount = repoPath => {
+  const fetchTotalIssuesCount = (callback) => {
     let totalUrl = "https://api.github.com/repos" + repoPath;
-    fetch(totalUrl, {
+    return fetch(totalUrl, {
       headers: {
-        Authorization: "token 6bca89b92fdf93b613b15284b6632a4f887ca3c7"
+        Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
       }
     })
       .then(res => {
@@ -58,119 +60,67 @@ const App = () => {
       })
       .then(repoDetails => {
         setTotalIssuesCount(repoDetails.open_issues_count);
-        console.log(repoDetails.open_issues_count);
+        console.log('Total Open Issues Count',repoDetails.open_issues_count);
+        callback(null, {'success': true});
       });
   };
 
-  const fetchPullRequestCount = repoPath => {
+  const fetchPullRequestCount = (callback) => {
+    let tempRepoPath = repoPath;
+    if(repoPath[0] === '/') {
+      tempRepoPath = repoPath.slice(1);
+    }
+
     let totalUrl =
-      "https://api.github.com/repos" +
-      repoPath +
-      "/pulls?state=open&page=1" +
-      "&per_page=100";
-    fetch(totalUrl, {
+      "https://api.github.com/search/issues?q=repo:" +
+      tempRepoPath + "+is:pr+is:open";
+    return fetch(totalUrl, {
       headers: {
-        Authorization: "token 6bca89b92fdf93b613b15284b6632a4f887ca3c7"
+        Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
       }
     })
       .then(res => {
-        let headers = res.headers;
-        //possibility of no link
-        headers.forEach((value, key) => {
-          if (key === "link") {
-            value = value
-              .split(",")[1]
-              .split(";")[0]
-              .trim()
-              .slice(0, -1)
-              .slice(1);
-            let lastPageUrl = url.parse(value);
-            let lastPageNumberTemp = lastPageUrl.search
-              .slice(1)
-              .split("&")[2]
-              .split("=")[1];
-            console.log(lastPageNumberTemp);
-            if (lastPageNumberTemp >= 1) setLastPageNumber(lastPageNumberTemp);
-          }
-        });
         return res.json();
       })
       .then(pullRequests => {
-        if (lastPageNumber) {
-          totalUrl =
-            "https://api.github.com/repos" +
-            repoPath +
-            "/pulls?state=open&page=1" +
-            "&per_page=" +
-            lastPageNumber;
-          fetch(totalUrl, {
-            headers: {
-              Authorization: "token 6bca89b92fdf93b613b15284b6632a4f887ca3c7"
-            }
-          })
-            .then(res => {
-              return res.json();
-            })
-            .then(lastPageItems => {
-              if (lastPageItems && lastPageItems.length) {
-                console.log(lastPageItems, lastPageItems.length);
-                debugger;
-                setTotalPRCount(lastPageItems.length + 100 * lastPageNumber);
-                console.log(lastPageItems.length + 100 * lastPageNumber);
-              }
-            });
-        }
-        console.log("Got the Pull Requests");
+        console.log("Got the Pull Requests", pullRequests);
+        callback(null, {'success': true});
       });
   };
 
-  const fetchIssues = pageNumber => {
+  const fetchIssues = (days, callback) => {
+    console.log('I came here');
+    let date = null;
+    if(!days || typeof days !== 'number') {
+      days = 1;
+    }
+
+    date = moment(new Date()).subtract(days, "days").format("YYYY-MM-DD");
     if (error) {
       return;
     }
-    if (!pageNumber || typeof pageNumber !== "number") {
-      pageNumber = 1;
-    }
-    if (pageNumber <= recentPageNumber) {
-      return;
-    }
-    setRecentPageNumber(recentPageNumber);
+
     if (repoPath) {
+      let tempRepoPath = repoPath;
+      if(repoPath[0] === '/') {
+        tempRepoPath = repoPath.slice(1);
+      }
       let totalUrl =
-        "https://api.github.com/repos" +
-        repoPath +
-        "/issues?state=open&page=" +
-        pageNumber +
-        "&per_page=100";
-      setLoading(true);
-      fetch(totalUrl, {
+        "https://api.github.com/search/issues?q=repo:" +
+        tempRepoPath  +
+        "+is:issue+is:open+created:>=" + date;
+      return fetch(totalUrl, {
         headers: {
-          Authorization: "token 6bca89b92fdf93b613b15284b6632a4f887ca3c7"
+          Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
         }
       })
         .then(res => {
           return res.json();
         })
-        .then(issues => {
-          fetchTotalIssuesCount(repoPath);
-          fetchPullRequestCount(repoPath);
-          if (issues && issues.length) {
-            issues = issues.filter(function(val) {
-              if (val["pull_request"]) {
-                return false;
-              }
-              return true;
-            });
-            issueInfo.total += issues.length;
-            setIssuesInfo(issueInfo);
-          }
-
-          if (issues && issues.length === 0) {
-            setFoundResult(true);
-            setLoading(false);
-          } else {
-            fetchIssues(pageNumber + 1);
-          }
+        .then(issuesObj => {
+          let issues = issuesObj.items;
+          console.log("IssuesObj", issuesObj);
+          callback(null, {'success': true});
         });
     } else {
       setError(true);
@@ -180,11 +130,54 @@ const App = () => {
   const handleKeyPress = event => {
     if (event.key === "Enter") {
       event.preventDefault();
+      setLoading(true);
       setFoundResult(false);
-      setIssuesInfo({});
-      fetchIssues(1);
+      setIssuesInfo({
+        total: 0,
+        firstSeg: 0,
+        secondSeg: 0,
+        thirdSeg: 0
+      });
+
+      parallel({
+        link1: function(callback){
+          fetchIssues(1, callback);
+        },
+        link2: function(callback){
+          fetchIssues(7, callback);
+        },
+        link3: function(callback){
+          fetchTotalIssuesCount(callback);
+        },
+        link3: function(callback) {
+          fetchPullRequestCount(callback);
+        }
+      },function(err,links){
+        if(err){
+          console.log('Noooooo');
+        }
+        else{
+          console.log('THanks', links);
+        }
+      });
+
+
     }
   };
+
+  const handleFetchClick = () => {
+    setIssuesInfo({
+      total: 0,
+      firstSeg: 0,
+      secondSeg: 0,
+      thirdSeg: 0
+    });
+    fetchIssues(1);
+    fetchIssues(7);
+    fetchTotalIssuesCount();
+    fetchPullRequestCount();
+  }
+
   const handleChange = event => {
     let inputUrl = event.target.value.trim();
     if (!inputUrl) {
@@ -271,7 +264,7 @@ const App = () => {
           <Row>
             <Col className="justify-content-center d-flex" xs={12}>
               <Button
-                onClick={fetchIssues}
+                onClick={handleFetchClick}
                 className="text-uppercase"
                 style={{ fontWeight: 600 }}
               >
