@@ -1,6 +1,6 @@
 import React from "react";
 import moment from "moment";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import InputGroup from "react-bootstrap/InputGroup";
 import Button from "react-bootstrap/Button";
 import FormControl from "react-bootstrap/FormControl";
@@ -14,7 +14,12 @@ import GitHubMark from "./images/github_mark_light-lg.png";
 import url from "url";
 import { Motion, spring } from "react-motion";
 import "./App.css";
-import { parallel } from 'async';
+import { parallel } from "async";
+
+const config = { stiffness: 140, damping: 14 };
+const toCSS = scale => ({
+  transform: `scale3d(${scale}, ${scale}, ${scale})`
+});
 
 const App = () => {
   const [repoUrl, setRepoUrl] = useState("");
@@ -29,154 +34,182 @@ const App = () => {
   const [foundResult, setFoundResult] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [recentPageNumber, setRecentPageNumber] = useState(0);
 
-  const [totalIssuesCount, setTotalIssuesCount] = useState(0);
-  const [totalPRCount, setTotalPRCount] = useState(0);
-  const [lastPageNumber, setLastPageNumber] = useState(-1);
-
-  useEffect(() => {});
   const validateUrl = url => {
     let acceptedProtocols = { "https:": true, "http:": true };
     return (
-      url.protocol &&
-      url.protocol in acceptedProtocols &&
+      (!url.protocol || (url.protocol && url.protocol in acceptedProtocols)) &&
       url.host &&
-      url.host === "github.com" &&
+      (url.host === "github.com" || "www.github.com") &&
       url.path &&
-      url.path.split("/").length === 3
+      url.path.split("/").length >= 2
     );
   };
 
-  const fetchTotalIssuesCount = (callback) => {
+  const fetchTotalIssuesCount = callback => {
     let totalUrl = "https://api.github.com/repos" + repoPath;
     return fetch(totalUrl, {
       headers: {
-        Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
+        Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
       }
     })
       .then(res => {
         return res.json();
       })
-      .then(repoDetails => {
-        setTotalIssuesCount(repoDetails.open_issues_count);
-        console.log('Total Open Issues Count',repoDetails.open_issues_count);
-        callback(null, {'success': true});
+      .then(function(repoDetails) {
+        if (repoDetails.message && repoDetails.message === "Not Found") {
+          callback(true, null);
+        } else {
+          callback(null, repoDetails.open_issues_count);
+        }
       });
   };
 
-  const fetchPullRequestCount = (callback) => {
+  const fetchPullRequestCount = callback => {
     let tempRepoPath = repoPath;
-    if(repoPath[0] === '/') {
+    if (repoPath[0] === "/") {
       tempRepoPath = repoPath.slice(1);
     }
 
     let totalUrl =
       "https://api.github.com/search/issues?q=repo:" +
-      tempRepoPath + "+is:pr+is:open";
+      tempRepoPath +
+      "+is:pr+is:open";
     return fetch(totalUrl, {
       headers: {
-        Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
+        Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
       }
     })
       .then(res => {
         return res.json();
       })
-      .then(pullRequests => {
-        console.log("Got the Pull Requests", pullRequests);
-        callback(null, {'success': true});
+      .then(function(pullRequests) {
+        if (
+          pullRequests.message &&
+          (pullRequests.message === "Not Found" ||
+            pullRequests.message === "Validation Failed")
+        ) {
+          callback(true, null);
+        } else {
+          callback(null, pullRequests.total_count);
+        }
       });
   };
 
   const fetchIssues = (days, callback) => {
-    console.log('I came here');
-    let date = null;
-    if(!days || typeof days !== 'number') {
+    if (!days || typeof days !== "number") {
       days = 1;
     }
 
-    date = moment(new Date()).subtract(days, "days").format("YYYY-MM-DD");
+    let date = moment(new Date())
+      .subtract(days, "days")
+      .format("YYYY-MM-DD");
     if (error) {
       return;
     }
 
     if (repoPath) {
       let tempRepoPath = repoPath;
-      if(repoPath[0] === '/') {
+      if (repoPath[0] === "/") {
         tempRepoPath = repoPath.slice(1);
       }
       let totalUrl =
         "https://api.github.com/search/issues?q=repo:" +
-        tempRepoPath  +
-        "+is:issue+is:open+created:>=" + date;
+        tempRepoPath +
+        "+is:issue+is:open+created:>=" +
+        date;
       return fetch(totalUrl, {
         headers: {
-          Authorization: "token 5b74479959e6943672be005eed144377dfb957ad"
+          Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
         }
       })
         .then(res => {
           return res.json();
         })
-        .then(issuesObj => {
-          let issues = issuesObj.items;
-          console.log("IssuesObj", issuesObj);
-          callback(null, {'success': true});
+        .then(function(issuesObj) {
+          if (
+            issuesObj.message &&
+            (issuesObj.message === "Not Found" ||
+              issuesObj.message === "Validation Failed")
+          ) {
+            callback(true, null);
+          } else {
+            callback(null, issuesObj.total_count);
+          }
         });
     } else {
       setError(true);
       setErrorText("The input field cannot be left empty!");
     }
   };
-  const handleKeyPress = event => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      setLoading(true);
-      setFoundResult(false);
-      setIssuesInfo({
-        total: 0,
-        firstSeg: 0,
-        secondSeg: 0,
-        thirdSeg: 0
-      });
 
-      parallel({
-        link1: function(callback){
-          fetchIssues(1, callback);
-        },
-        link2: function(callback){
-          fetchIssues(7, callback);
-        },
-        link3: function(callback){
-          fetchTotalIssuesCount(callback);
-        },
-        link3: function(callback) {
-          fetchPullRequestCount(callback);
-        }
-      },function(err,links){
-        if(err){
-          console.log('Noooooo');
-        }
-        else{
-          console.log('THanks', links);
-        }
-      });
-
-
-    }
+  const calculateFields = (
+    firstSeg,
+    allSecondSeg,
+    totalIncludingPRs,
+    totalPRs
+  ) => {
+    issueInfo.total = totalIncludingPRs - totalPRs;
+    issueInfo.firstSeg = firstSeg;
+    issueInfo.secondSeg = allSecondSeg - firstSeg;
+    issueInfo.thirdSeg = issueInfo.total - allSecondSeg;
+    setIssuesInfo(issueInfo);
+    setLoading(false);
+    setFoundResult(true);
   };
 
-  const handleFetchClick = () => {
+  const consolidatedFetch = () => {
+    setLoading(true);
+    setFoundResult(false);
     setIssuesInfo({
       total: 0,
       firstSeg: 0,
       secondSeg: 0,
       thirdSeg: 0
     });
-    fetchIssues(1);
-    fetchIssues(7);
-    fetchTotalIssuesCount();
-    fetchPullRequestCount();
-  }
+
+    parallel(
+      {
+        firstSegIssues: function(callback) {
+          fetchIssues(1, callback);
+        },
+        allSecondSegIssues: function(callback) {
+          fetchIssues(7, callback);
+        },
+        totalIssuesIncludingPRs: function(callback) {
+          fetchTotalIssuesCount(callback);
+        },
+        totalPRs: function(callback) {
+          fetchPullRequestCount(callback);
+        }
+      },
+      function(err, issues) {
+        if (err) {
+          setError(true);
+          setErrorText("Invalid Repository or Owner!");
+          setLoading(false);
+        } else {
+          calculateFields(
+            issues["firstSegIssues"],
+            issues["allSecondSegIssues"],
+            issues["totalIssuesIncludingPRs"],
+            issues["totalPRs"]
+          );
+        }
+      }
+    );
+  };
+
+  const handleKeyPress = event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      consolidatedFetch();
+    }
+  };
+
+  const handleFetchClick = () => {
+    consolidatedFetch();
+  };
 
   const handleChange = event => {
     let inputUrl = event.target.value.trim();
@@ -197,10 +230,6 @@ const App = () => {
     }
     setRepoUrl(inputUrl);
   };
-  const config = { stiffness: 140, damping: 14 };
-  const toCSS = scale => ({
-    transform: `scale3d(${scale}, ${scale}, ${scale})`
-  });
   const centerAlign = {
     position: "absolute",
     top: "50%",
@@ -288,9 +317,9 @@ const App = () => {
                 <tbody>
                   <tr>
                     <td align="center">{issueInfo.total}</td>
-                    <td align="center">2</td>
-                    <td align="center">1</td>
-                    <td align="center">1</td>
+                    <td align="center">{issueInfo.firstSeg}</td>
+                    <td align="center">{issueInfo.secondSeg}</td>
+                    <td align="center">{issueInfo.thirdSeg}</td>
                   </tr>
                 </tbody>
               </Table>
