@@ -1,28 +1,25 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React from "react";
 import moment from "moment";
-import { useState } from "react";
-import InputGroup from "react-bootstrap/InputGroup";
-import Button from "react-bootstrap/Button";
-import FormControl from "react-bootstrap/FormControl";
-import Form from "react-bootstrap/Form";
+import { useState, useEffect } from "react";
 import Table from "react-bootstrap/Table";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Loader from "react-loader-spinner";
 import GitHubMark from "./images/github_mark_light-lg.png";
-import url from "url";
-import { Motion, spring } from "react-motion";
-import "./App.css";
 import { parallel } from "async";
 
-const config = { stiffness: 140, damping: 14 };
-const toCSS = scale => ({
-  transform: `scale3d(${scale}, ${scale}, ${scale})`
-});
+import UrlBar from "./containers/UrlBar";
+import { returnStatement } from "@babel/types";
+const centerAlign = {
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)"
+};
 
 const App = () => {
-  const [repoUrl, setRepoUrl] = useState("");
   const [repoPath, setRepoPath] = useState("");
   const [errorText, setErrorText] = useState("");
   const [issueInfo, setIssuesInfo] = useState({
@@ -35,19 +32,9 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  const validateUrl = url => {
-    let acceptedProtocols = { "https:": true, "http:": true };
-    return (
-      (!url.protocol || (url.protocol && url.protocol in acceptedProtocols)) &&
-      url.host &&
-      (url.host === "github.com" || "www.github.com") &&
-      url.path &&
-      url.path.split("/").length >= 2
-    );
-  };
-
   const fetchTotalIssuesCount = callback => {
     let totalUrl = "https://api.github.com/repos" + repoPath;
+    console.log("Total URL", totalUrl, repoPath);
     return fetch(totalUrl, {
       headers: {
         Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
@@ -67,6 +54,7 @@ const App = () => {
 
   const fetchPullRequestCount = callback => {
     let tempRepoPath = repoPath;
+    console.log("Total PR ", repoPath);
     if (repoPath[0] === "/") {
       tempRepoPath = repoPath.slice(1);
     }
@@ -100,7 +88,7 @@ const App = () => {
     if (!days || typeof days !== "number") {
       days = 1;
     }
-
+    console.log("IssuesDays ", repoPath);
     let date = moment(new Date())
       .subtract(days, "days")
       .format("YYYY-MM-DD");
@@ -154,19 +142,12 @@ const App = () => {
     issueInfo.secondSeg = allSecondSeg - firstSeg;
     issueInfo.thirdSeg = issueInfo.total - allSecondSeg;
     setIssuesInfo(issueInfo);
-    setLoading(false);
-    setFoundResult(true);
   };
 
-  const consolidatedFetch = () => {
-    setLoading(true);
-    setFoundResult(false);
-    setIssuesInfo({
-      total: 0,
-      firstSeg: 0,
-      secondSeg: 0,
-      thirdSeg: 0
-    });
+  useEffect(() => {
+    if (!repoPath) {
+      return;
+    }
 
     parallel(
       {
@@ -195,47 +176,25 @@ const App = () => {
             issues["totalIssuesIncludingPRs"],
             issues["totalPRs"]
           );
+          setFoundResult(true);
+          setLoading(false);
         }
       }
     );
+  }, [repoPath]);
+
+  const consolidatedFetch = path => {
+    setRepoPath(path);
+    setLoading(true);
+    setFoundResult(false);
+    setIssuesInfo({
+      total: 0,
+      firstSeg: 0,
+      secondSeg: 0,
+      thirdSeg: 0
+    });
   };
 
-  const handleKeyPress = event => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      consolidatedFetch();
-    }
-  };
-
-  const handleFetchClick = () => {
-    consolidatedFetch();
-  };
-
-  const handleChange = event => {
-    let inputUrl = event.target.value.trim();
-    if (!inputUrl) {
-      setRepoUrl(inputUrl);
-      setErrorText("");
-      setError(false);
-      return;
-    }
-    let parsedUrl = url.parse(inputUrl);
-    if (!validateUrl(parsedUrl)) {
-      setRepoPath("");
-      setError(true);
-      setErrorText("Invalid URL! Please check & try again!");
-    } else {
-      setRepoPath(parsedUrl.pathname);
-      setError(false);
-    }
-    setRepoUrl(inputUrl);
-  };
-  const centerAlign = {
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)"
-  };
   if (loading) {
     return (
       <div style={centerAlign}>
@@ -259,49 +218,7 @@ const App = () => {
             </Row>
           </Col>
         </Row>
-        <Form>
-          <Row>
-            <Col>
-              <InputGroup className="mb-3">
-                <FormControl
-                  id="basic-url"
-                  aria-describedby="basic-addon3"
-                  placeholder="example: https://github.com/facebook/react"
-                  onKeyPress={handleKeyPress}
-                  value={repoUrl}
-                  onChange={handleChange}
-                />
-              </InputGroup>
-            </Col>
-          </Row>
-          {error ? (
-            <Motion
-              defaultStyle={{ scale: 0 }}
-              style={{ scale: spring(1, config) }}
-            >
-              {value => (
-                <div className="box" style={toCSS(value.scale)}>
-                  <Row>
-                    <Col>
-                      <Form.Text className="text-light">{errorText}</Form.Text>
-                    </Col>
-                  </Row>
-                </div>
-              )}
-            </Motion>
-          ) : null}
-          <Row>
-            <Col className="justify-content-center d-flex" xs={12}>
-              <Button
-                onClick={handleFetchClick}
-                className="text-uppercase"
-                style={{ fontWeight: 600 }}
-              >
-                Fetch Issues Information
-              </Button>
-            </Col>
-          </Row>
-        </Form>
+        <UrlBar triggerEvent={consolidatedFetch} resultError={errorText} />
         {foundResult ? (
           <Row className="mt-5">
             <Col>
