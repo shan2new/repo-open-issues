@@ -11,7 +11,6 @@ import GitHubMark from "./images/github_mark_light-lg.png";
 import { parallel } from "async";
 
 import UrlBar from "./containers/UrlBar";
-import { returnStatement } from "@babel/types";
 const centerAlign = {
   position: "absolute",
   top: "50%",
@@ -37,7 +36,7 @@ const App = () => {
     console.log("Total URL", totalUrl, repoPath);
     return fetch(totalUrl, {
       headers: {
-        Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
+        Authorization: "token 7deef6c6ce33b86b1ca1cca06b7004bd8ac5e04d"
       }
     })
       .then(res => {
@@ -54,7 +53,6 @@ const App = () => {
 
   const fetchPullRequestCount = callback => {
     let tempRepoPath = repoPath;
-    console.log("Total PR ", repoPath);
     if (repoPath[0] === "/") {
       tempRepoPath = repoPath.slice(1);
     }
@@ -65,7 +63,7 @@ const App = () => {
       "+is:pr+is:open";
     return fetch(totalUrl, {
       headers: {
-        Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
+        Authorization: "token 7deef6c6ce33b86b1ca1cca06b7004bd8ac5e04d"
       }
     })
       .then(res => {
@@ -88,7 +86,6 @@ const App = () => {
     if (!days || typeof days !== "number") {
       days = 1;
     }
-    console.log("IssuesDays ", repoPath);
     let date = moment(new Date())
       .subtract(days, "days")
       .format("YYYY-MM-DD");
@@ -108,7 +105,7 @@ const App = () => {
         date;
       return fetch(totalUrl, {
         headers: {
-          Authorization: "token 702328867e6e94d22a6908b7b74f1fb1b0a57a0d"
+          Authorization: "token 7deef6c6ce33b86b1ca1cca06b7004bd8ac5e04d"
         }
       })
         .then(res => {
